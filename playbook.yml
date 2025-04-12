@@ -1,0 +1,71 @@
+---
+- name: Simple System Setup with ansible_facts
+  hosts: localhost
+  become: true
+  vars:
+    users:
+      - devuser
+      - qauser
+    packages:
+      - htop
+      - iftop
+      - net-tools
+
+  tasks:
+
+    # Task 1: Create users on RedHat family version 7+
+    - name: Create users (RedHat 7+ only)
+      user:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ users }}"
+      when:
+        - ansible_facts['os_family'] == "RedHat"
+        - ansible_facts['distribution_major_version'] | int >= 7
+
+    # Task 2: Install packages on RedHat or CentOS
+    - name: Install packages (RedHat or CentOS)
+      package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages }}"
+      when: ansible_facts['distribution'] in ["RedHat", "CentOS"]
+
+    # Task 3: Copy nginx config and notify restart
+    - name: Copy nginx.conf
+      copy:
+        src: nginx.conf
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart nginx
+
+    # Task 4: Ensure firewalld is running (RedHat 7+ or CentOS 8+)
+    - name: Start and enable firewalld
+      service:
+        name: firewalld
+        state: started
+        enabled: true
+      when: >
+        (ansible_facts['distribution'] == "RedHat" and ansible_facts['distribution_major_version'] | int >= 7) or
+        (ansible_facts['distribution'] == "CentOS" and ansible_facts['distribution_major_version'] | int >= 8)
+
+    # Task 5a: Ensure /var/log/myapp exists
+    - name: Create log directory
+      file:
+        path: /var/log/myapp
+        state: directory
+        mode: '0755'
+
+    # Task 5b: Debug message on Ubuntu
+    - name: Show debug message if Ubuntu
+      debug:
+        msg: "Log directory is in place!"
+      when: ansible_facts['distribution'] == "Ubuntu"
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted
